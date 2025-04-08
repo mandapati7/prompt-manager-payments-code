@@ -13,6 +13,7 @@ This project is a prompt manager where I store all my favorite prompts for easy 
 Frontend: Next.js, Tailwind, Shadcn, Framer Motion
 Backend: PostgreSQL, Supabase, Drizzle
 Auth: Clerk
+Payments: Stripe
 
 
 ## General Rules
@@ -47,6 +48,7 @@ Auth: Clerk
 
 ## Auth Rules
 
+## Payments Rules
 
 
 
