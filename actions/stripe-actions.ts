@@ -2,31 +2,9 @@
 
 import { createCustomerAction, getCustomerByUserIdAction, updateCustomerByStripeCustomerIdAction } from "@/actions/customers-actions";
 import { SelectCustomer } from "@/db/schema/customers-schema";
-import { stripe } from "@/lib/stripe";
-import Stripe from "stripe";
+import { getMembershipStatusFromSubscription, stripe } from "@/lib/stripe";
 
 export type MembershipStatus = SelectCustomer["membership"];
-
-// Helper function to determine membership status based on Stripe subscription status
-export const getMembershipStatusFromSubscription = (status: Stripe.Subscription.Status): MembershipStatus => {
-  switch (status) {
-    case "active":
-    case "trialing":
-      // Active or trialing subscriptions map to 'pro'
-      return "pro"; // Assuming 'pro' is the active paid status
-    case "canceled":
-    case "incomplete":
-    case "incomplete_expired":
-    case "past_due":
-    case "paused":
-    case "unpaid":
-      // All other non-active statuses map to 'free'
-      return "free";
-    default:
-      // Default to 'free' for any unknown status
-      return "free";
-  }
-};
 
 // Helper function to retrieve a Stripe subscription
 const getSubscription = async (subscriptionId: string) => {

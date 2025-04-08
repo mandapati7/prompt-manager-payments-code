@@ -1,5 +1,5 @@
-import { getMembershipStatusFromSubscription, manageSubscriptionStatusChange, upsertStripeCustomer } from "@/actions/stripe-actions";
-import { stripe } from "@/lib/stripe";
+import { manageSubscriptionStatusChange, upsertStripeCustomer } from "@/actions/stripe-actions";
+import { getMembershipStatusFromSubscription, stripe } from "@/lib/stripe";
 import console from "console";
 import { headers } from "next/headers";
 import Stripe from "stripe";
@@ -7,18 +7,9 @@ import Stripe from "stripe";
 const relevantEvents = new Set(["checkout.session.completed", "customer.subscription.updated", "customer.subscription.deleted"]);
 
 export async function POST(req: Request) {
-  console.log("==================== WEBHOOK DEBUG ====================");
-  console.log("Request method:", req.method);
-  console.log("Request URL:", req.url);
-  console.log("Request headers:", Object.fromEntries([...req.headers.entries()]));
-  console.log("Environment check - STRIPE_WEBHOOK_SECRET exists:", !!process.env.STRIPE_WEBHOOK_SECRET);
-  console.log("Received Stripe webhook request");
   const body = await req.text();
-  console.log("Received Stripe webhook request:", body);
   const sig = (await headers()).get("Stripe-Signature") as string;
-  console.log("Stripe-Signature:", sig);
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  console.log("Stripe webhook secret:", webhookSecret);
   let event: Stripe.Event;
 
   try {
