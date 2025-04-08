@@ -5,6 +5,7 @@ import { prompts } from "@/db/schema/prompts-schema";
 import { devDelay } from "@/lib/dev-delay";
 import { and, desc, eq } from "drizzle-orm";
 import { requireUserId } from "./auth-actions";
+import { getCustomerByUserIdAction } from "./customers-actions";
 
 /**
  * Fetches all prompts from the database for the current user
@@ -31,6 +32,7 @@ export async function getPrompts() {
  * @param description - A short description of what the prompt does
  * @param content - The actual prompt text
  * @returns The newly created prompt
+ * @throws Error if user has reached their prompt limit
  */
 export async function createPrompt({ name, description, content }: { name: string; description: string; content: string }) {
   try {
@@ -38,6 +40,18 @@ export async function createPrompt({ name, description, content }: { name: strin
 
     // Add artificial delay in development
     await devDelay();
+
+    // Get user's membership status
+    const customer = await getCustomerByUserIdAction(userId);
+    const isPro = customer[0]?.membership === "pro";
+
+    // If user is not pro, check their prompt count
+    if (!isPro) {
+      const userPrompts = await db.select().from(prompts).where(eq(prompts.user_id, userId));
+      if (userPrompts.length >= 3) {
+        throw new Error("Free users can only create up to 3 prompts. Please upgrade to Pro for unlimited prompts.");
+      }
+    }
 
     // Insert the new prompt with the user ID
     const [newPrompt] = await db
@@ -53,6 +67,9 @@ export async function createPrompt({ name, description, content }: { name: strin
     return newPrompt;
   } catch (error) {
     console.error("Error creating prompt:", error);
+    if (error instanceof Error) {
+      throw error; // Re-throw the limit error to preserve the message
+    }
     throw new Error("Failed to create prompt");
   }
 }

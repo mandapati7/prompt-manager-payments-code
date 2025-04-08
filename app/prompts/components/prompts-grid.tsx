@@ -8,15 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SelectPrompt } from "@/db/schema/prompts-schema";
+import { useMembership } from "@/hooks/use-membership";
+import { useAuth } from "@clerk/nextjs";
 import { motion } from "framer-motion";
-import { Check, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Edit2, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
+
+// Get the subscription link from env
+const subscriptionLink = process.env.NEXT_PUBLIC_MONTHLY_SUBSCRIPTION_LINK;
 
 interface PromptsGridProps {
   initialPrompts: SelectPrompt[];
 }
 
 export const PromptsGrid = ({ initialPrompts }: PromptsGridProps) => {
+  const { userId } = useAuth();
+  const { isPro } = useMembership();
+
   // State for prompts and UI
   const [prompts, setPrompts] = useState<SelectPrompt[]>(initialPrompts);
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -35,6 +43,19 @@ export const PromptsGrid = ({ initialPrompts }: PromptsGridProps) => {
     description: "",
     content: ""
   });
+
+  // Function to handle create button click
+  const handleCreateClick = () => {
+    if (!isPro && prompts.length >= 3) {
+      // Navigate directly to Stripe checkout with user ID
+      const checkoutUrl = userId && subscriptionLink ? `${subscriptionLink}?client_reference_id=${userId}` : "#";
+      if (checkoutUrl !== "#") {
+        window.location.href = checkoutUrl;
+      }
+    } else {
+      setIsCreating(true);
+    }
+  };
 
   // Function to copy prompt content to clipboard
   const copyToClipboard = async (prompt: SelectPrompt) => {
@@ -93,7 +114,17 @@ export const PromptsGrid = ({ initialPrompts }: PromptsGridProps) => {
       setFormData({ name: "", description: "", content: "" });
     } catch (err) {
       console.error("Failed to save prompt:", err);
-      setError("Failed to save prompt. Please try again.");
+      const message = err instanceof Error ? err.message : "Failed to save prompt. Please try again.";
+      setError(message);
+
+      // If the error is about the prompt limit, show the upgrade dialog
+      if (message.includes("upgrade to Pro")) {
+        // Navigate directly to Stripe checkout with user ID
+        const checkoutUrl = userId && subscriptionLink ? `${subscriptionLink}?client_reference_id=${userId}` : "#";
+        if (checkoutUrl !== "#") {
+          window.location.href = checkoutUrl;
+        }
+      }
     } finally {
       setIsSaving(false);
     }
@@ -119,11 +150,20 @@ export const PromptsGrid = ({ initialPrompts }: PromptsGridProps) => {
       {/* Create prompt button */}
       <div className="mb-6 flex justify-end">
         <Button
-          onClick={() => setIsCreating(true)}
+          onClick={handleCreateClick}
           className="gap-2"
         >
-          <Plus className="w-5 h-5" />
-          Create Prompt
+          {!isPro && prompts.length >= 3 ? (
+            <>
+              <Sparkles className="w-5 h-5" />
+              Upgrade to Create More Prompts
+            </>
+          ) : (
+            <>
+              <Plus className="w-5 h-5" />
+              Create Prompt
+            </>
+          )}
         </Button>
       </div>
 

@@ -1,17 +1,25 @@
 "use client";
 
 import { useMembership } from "@/hooks/use-membership";
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton, useAuth, UserButton } from "@clerk/nextjs";
 import { motion } from "framer-motion";
 import { BookMarked } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "./ui/button";
 
+// Get the subscription link from env
+const subscriptionLink = process.env.NEXT_PUBLIC_MONTHLY_SUBSCRIPTION_LINK;
+
 export const Header = () => {
   // Get current pathname for active link styling
   const pathname = usePathname();
   const { isPro, loading } = useMembership();
+  // Get userId for the checkout link
+  const { userId } = useAuth();
+
+  // Add client reference ID to subscription link if user is logged in
+  const finalSubscriptionLink = userId && subscriptionLink ? `${subscriptionLink}?client_reference_id=${userId}` : "#";
 
   // Navigation items
   const navItems = [
@@ -73,6 +81,28 @@ export const Header = () => {
                   >
                     PRO
                   </motion.span>
+                )}
+                {/* Show Upgrade button if user is signed in, not pro, and not loading */}
+                {!isPro && !loading && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-none hover:opacity-90"
+                    >
+                      {/* Link to the Stripe checkout page */}
+                      <a
+                        href={finalSubscriptionLink}
+                        className={finalSubscriptionLink === "#" ? "pointer-events-none opacity-50" : ""}
+                      >
+                        Upgrade
+                      </a>
+                    </Button>
+                  </motion.div>
                 )}
                 <UserButton />
               </div>
