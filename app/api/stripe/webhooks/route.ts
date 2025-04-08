@@ -1,6 +1,5 @@
 import { manageSubscriptionStatusChange, upsertStripeCustomer } from "@/actions/stripe-actions";
 import { getMembershipStatusFromSubscription, stripe } from "@/lib/stripe";
-import console from "console";
 import { headers } from "next/headers";
 import Stripe from "stripe";
 
