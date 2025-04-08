@@ -1,5 +1,6 @@
 "use client";
 
+import { useMembership } from "@/hooks/use-membership";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import { motion } from "framer-motion";
 import { BookMarked } from "lucide-react";
@@ -10,12 +11,17 @@ import { Button } from "./ui/button";
 export const Header = () => {
   // Get current pathname for active link styling
   const pathname = usePathname();
+  const { isPro, loading } = useMembership();
 
   // Navigation items
   const navItems = [
     {
       name: "Home",
       href: "/"
+    },
+    {
+      name: "Pricing",
+      href: "/pricing"
     },
     {
       name: "Prompts",
@@ -58,7 +64,18 @@ export const Header = () => {
             ))}
 
             <SignedIn>
-              <UserButton />
+              <div className="flex items-center gap-2">
+                {isPro && !loading && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="px-2 py-1 text-xs font-medium bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full"
+                  >
+                    PRO
+                  </motion.span>
+                )}
+                <UserButton />
+              </div>
             </SignedIn>
 
             <SignedOut>

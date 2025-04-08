@@ -1,74 +1,126 @@
-import { manageSubscriptionStatusChange, updateStripeCustomer } from "@/actions/stripe-actions";
+import { getMembershipStatusFromSubscription, manageSubscriptionStatusChange, upsertStripeCustomer } from "@/actions/stripe-actions";
 import { stripe } from "@/lib/stripe";
+import console from "console";
 import { headers } from "next/headers";
 import Stripe from "stripe";
 
 const relevantEvents = new Set(["checkout.session.completed", "customer.subscription.updated", "customer.subscription.deleted"]);
 
 export async function POST(req: Request) {
+  console.log("==================== WEBHOOK DEBUG ====================");
+  console.log("Request method:", req.method);
+  console.log("Request URL:", req.url);
+  console.log("Request headers:", Object.fromEntries([...req.headers.entries()]));
+  console.log("Environment check - STRIPE_WEBHOOK_SECRET exists:", !!process.env.STRIPE_WEBHOOK_SECRET);
+  console.log("Received Stripe webhook request");
   const body = await req.text();
+  console.log("Received Stripe webhook request:", body);
   const sig = (await headers()).get("Stripe-Signature") as string;
+  console.log("Stripe-Signature:", sig);
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  console.log("Stripe webhook secret:", webhookSecret);
   let event: Stripe.Event;
 
   try {
     if (!sig || !webhookSecret) {
-      throw new Error("Webhook secret or signature missing");
+      console.error("Webhook Error: Missing Stripe signature or secret");
+      return new Response("Webhook Error: Configuration issue", { status: 400 });
     }
-
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
   } catch (err: unknown) {
-    if (err instanceof Error) {
-      console.error(`Webhook Error: ${err.message}`);
-      return new Response(`Webhook Error: ${err.message}`, { status: 400 });
-    }
-    console.error(`Webhook Error: ${err}`);
-    return new Response(`Webhook Error: ${err}`, { status: 400 });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error(`Webhook signature verification failed: ${message}`, err);
+    return new Response(`Webhook Error: ${message}`, { status: 400 });
   }
+
+  console.log(`Received Stripe event: ${event.type}`);
 
   if (relevantEvents.has(event.type)) {
     try {
       switch (event.type) {
         case "customer.subscription.updated":
         case "customer.subscription.deleted":
-          await handleSubscriptionChange(event);
+          // These events contain the subscription object directly
+          const subscription = event.data.object as Stripe.Subscription;
+          console.log(`Handling subscription update/delete for subscription: ${subscription.id}`);
+          await handleSubscriptionChange(subscription.id, subscription.customer as string);
           break;
 
         case "checkout.session.completed":
-          await handleCheckoutSession(event);
+          // This event contains the checkout session object
+          const checkoutSession = event.data.object as Stripe.Checkout.Session;
+          console.log(`Handling checkout session completion for session: ${checkoutSession.id}`);
+          await handleCheckoutSession(checkoutSession);
           break;
 
         default:
-          throw new Error("Unhandled relevant event!");
+          // Should not happen due to relevantEvents check, but good practice
+          console.warn(`Unhandled relevant event type: ${event.type}`);
       }
     } catch (error) {
-      console.error("Webhook handler failed:", error);
-      return new Response("Webhook handler failed. View your nextjs function logs.", {
-        status: 400
-      });
+      const message = error instanceof Error ? error.message : "Unknown error during webhook processing";
+      console.error(`Webhook handler failed for event ${event.type}: ${message}`, error);
+      // Return a generic error to avoid leaking implementation details
+      return new Response("Webhook handler failed", { status: 500 });
     }
+  } else {
+    console.log(`Ignoring irrelevant Stripe event: ${event.type}`);
   }
 
+  // Acknowledge receipt of the event to Stripe
   return new Response(JSON.stringify({ received: true }));
 }
 
-async function handleSubscriptionChange(event: Stripe.Event) {
-  const subscription = event.data.object as Stripe.Subscription;
-  const productId = subscription.items.data[0].price.product as string;
-  await manageSubscriptionStatusChange(subscription.id, subscription.customer as string, productId);
+// Handles subscription updates and deletions
+async function handleSubscriptionChange(subscriptionId: string, customerId: string) {
+  // Simply call the action to manage the status change
+  await manageSubscriptionStatusChange(subscriptionId, customerId);
 }
 
-async function handleCheckoutSession(event: Stripe.Event) {
-  const checkoutSession = event.data.object as Stripe.Checkout.Session;
-  if (checkoutSession.mode === "subscription") {
-    const subscriptionId = checkoutSession.subscription as string;
-    await updateStripeCustomer(checkoutSession.client_reference_id as string, subscriptionId, checkoutSession.customer as string);
+// Handles the completion of a checkout session (likely for new subscriptions)
+async function handleCheckoutSession(checkoutSession: Stripe.Checkout.Session) {
+  // Ensure it's a subscription mode checkout
+  if (checkoutSession.mode !== "subscription") {
+    console.log(`Ignoring checkout session ${checkoutSession.id} as it's not in subscription mode.`);
+    return;
+  }
 
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
-      expand: ["default_payment_method"]
-    });
+  const subscriptionId = checkoutSession.subscription as string;
+  const userId = checkoutSession.client_reference_id as string; // Your internal user ID
+  const customerId = checkoutSession.customer as string; // Stripe Customer ID
 
-    const productId = subscription.items.data[0].price.product as string;
-    await manageSubscriptionStatusChange(subscription.id, subscription.customer as string, productId);
+  if (!userId) {
+    console.error(`Missing client_reference_id (userId) in checkout session: ${checkoutSession.id}. Cannot link to internal user.`);
+    // Decide how to handle this - maybe create a customer without a link?
+    // For now, we'll throw an error to signal a problem.
+    throw new Error("Missing client_reference_id in checkout session");
+  }
+
+  if (!subscriptionId) {
+    console.error(`Missing subscription ID in checkout session: ${checkoutSession.id}. Cannot process.`);
+    throw new Error("Missing subscription ID in checkout session");
+  }
+
+  if (!customerId) {
+    console.error(`Missing customer ID in checkout session: ${checkoutSession.id}. Cannot process.`);
+    throw new Error("Missing customer ID in checkout session");
+  }
+
+  try {
+    // Fetch the newly created subscription to get its status
+    // We need this to determine the initial membership status
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const membershipStatus = getMembershipStatusFromSubscription(subscription.status);
+
+    console.log(`Upserting customer (User ID: ${userId}) from checkout session ${checkoutSession.id} with status ${membershipStatus}`);
+
+    // Call the upsert action with all necessary info
+    await upsertStripeCustomer(userId, customerId, subscriptionId, membershipStatus);
+  } catch (error) {
+    // Catch errors during subscription retrieval or upserting
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Failed to process checkout session ${checkoutSession.id}: ${message}`, error);
+    // Re-throw the error to be caught by the main handler
+    throw error;
   }
 }
