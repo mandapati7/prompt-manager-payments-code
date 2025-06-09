@@ -47,8 +47,18 @@ Payments: Stripe
 
 
 ## Auth Rules
+- We use Clerk for auth '
+- Use Clerk middleware to protect routes
+- Use clerk components (<UserButton>, <SignInButton>) for ui
+- Use Clerk server-side helpers (authl()) in Server Actions to get the user ID
+
+
 
 ## Payments Rules
+- use Stripe for payments
+- handle Stripe webhooks in /api/stripe/webhooks
+- we have a customers table for storing customer ids and subscription ids
+
 
 
 
