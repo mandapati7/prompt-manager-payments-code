@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "@/db";
-import { customersTable, InsertCustomer } from "@/db/schema/customers-schema";
+import { customers, InsertCustomer } from "@/db/schema/customers-schema";
 import { eq } from "drizzle-orm";
 
 export async function createCustomerAction(data: InsertCustomer) {
   try {
-    const [newCustomer] = await db.insert(customersTable).values(data).returning();
+    const [newCustomer] = await db.insert(customers).values(data).returning();
     return newCustomer;
   } catch (error) {
     console.error("Error creating customer:", error);
@@ -16,7 +16,7 @@ export async function createCustomerAction(data: InsertCustomer) {
 
 export async function getCustomerByUserIdAction(userId: string) {
   try {
-    const customer = await db.select().from(customersTable).where(eq(customersTable.userId, userId));
+    const customer = await db.select().from(customers).where(eq(customers.userId, userId));
     if (!customer) {
       throw new Error("Customer not found");
     }
@@ -30,7 +30,7 @@ export async function getCustomerByUserIdAction(userId: string) {
 
 export async function updateCustomerByUserIdAction(userId: string, data: Partial<InsertCustomer>) {
   try {
-    const [updatedCustomer] = await db.update(customersTable).set(data).where(eq(customersTable.userId, userId)).returning();
+    const [updatedCustomer] = await db.update(customers).set(data).where(eq(customers.userId, userId)).returning();
 
     if (!updatedCustomer) {
       throw new Error("Customer not found to update");
@@ -45,7 +45,7 @@ export async function updateCustomerByUserIdAction(userId: string, data: Partial
 
 export async function updateCustomerByStripeCustomerIdAction(stripeCustomerId: string, data: Partial<InsertCustomer>) {
   try {
-    const [updatedCustomer] = await db.update(customersTable).set(data).where(eq(customersTable.stripeCustomerId, stripeCustomerId)).returning();
+    const [updatedCustomer] = await db.update(customers).set(data).where(eq(customers.stripeCustomerId, stripeCustomerId)).returning();
 
     if (!updatedCustomer) {
       throw new Error("Customer not found by Stripe customer ID");
