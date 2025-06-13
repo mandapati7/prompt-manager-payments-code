@@ -21,16 +21,20 @@ export const Header = () => {
   // Add client reference ID to subscription link if user is logged in
   const finalSubscriptionLink = userId && subscriptionLink ? `${subscriptionLink}?client_reference_id=${userId}` : "#";
 
-  // Navigation items
+  // Navigation items - filtered based on membership status
+  // We don't show Pricing page for Pro members as they don't need to see it anymore
   const navItems = [
     {
       name: "Home",
       href: "/"
     },
-    {
-      name: "Pricing",
-      href: "/pricing"
-    },
+    // Only show Pricing for non-Pro members
+    ...(!isPro ? [
+      {
+        name: "Pricing",
+        href: "/pricing"
+      }
+    ] : []),
     {
       name: "Prompts",
       href: "/prompts"
